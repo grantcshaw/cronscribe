@@ -15,6 +15,16 @@ type Result struct {
 
 // Parse converts a human-readable schedule string into a cron expression.
 // It validates the resulting expression before returning.
+//
+// Supported formats:
+//   - "every minute"
+//   - "every hour"
+//   - "every day" / "daily"
+//   - "every week" / "weekly"
+//   - "every month" / "monthly"
+//   - "every N minutes"
+//   - "at HH:MM"
+//   - "at HH:MM on <weekday>"
 func Parse(input string) (*Result, error) {
 	input = strings.TrimSpace(strings.ToLower(input))
 	if input == "" {
@@ -80,6 +90,8 @@ func Parse(input string) (*Result, error) {
 	return &Result{Expression: expr, Description: desc}, nil
 }
 
+// dayName returns the name of the day of the week for a given 0-based index,
+// where 0 = Sunday and 6 = Saturday.
 func dayName(dow int) string {
 	names := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
 	if dow >= 0 && dow < len(names) {
