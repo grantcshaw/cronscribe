@@ -20,14 +20,20 @@ func RunSuggest(input string, w io.Writer) error {
 		return nil
 	}
 
-	if trimmed == "" {
-		fmt.Fprintln(w, "Common schedule suggestions:")
-	} else {
-		fmt.Fprintf(w, "Suggestions for %q:\n", trimmed)
-	}
+	printSuggestionsHeader(trimmed, w)
 
 	for _, s := range suggestions {
 		fmt.Fprintln(w, " ", suggester.Format(s))
 	}
 	return nil
+}
+
+// printSuggestionsHeader writes the appropriate header line to w based on
+// whether the user provided a specific input phrase or not.
+func printSuggestionsHeader(input string, w io.Writer) {
+	if input == "" {
+		fmt.Fprintln(w, "Common schedule suggestions:")
+	} else {
+		fmt.Fprintf(w, "Suggestions for %q:\n", input)
+	}
 }
