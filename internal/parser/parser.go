@@ -3,53 +3,87 @@ package parser
 import (
 	"fmt"
 	"strings"
+
+	"github.com/cronscribe/cronscribe/internal/validator"
 )
 
-// CronExpression holds the parsed cron fields.
-type CronExpression struct {
-	Minute     string
-	Hour       string
-	DayOfMonth string
-	Month      string
-	DayOfWeek  string
+// Result holds the parsed cron expression and its human-readable description.
+type Result struct {
+	Expression  string
+	Description string
 }
 
-// String returns the standard 5-field cron expression.
-func (c CronExpression) String() string {
-	return fmt.Sprintf("%s %s %s %s %s",
-		c.Minute, c.Hour, c.DayOfMonth, c.Month, c.DayOfWeek)
-}
+// Parse converts a human-readable schedule string into a cron expression.
+// It validates the resulting expression before returning.
+func Parse(input string) (*Result, error) {
+	input = strings.TrimSpace(strings.ToLower(input))
+	if input == "" {
+		return nil, fmt.Errorf("empty input")
+	}
 
-// Parse converts a human-readable schedule string into a CronExpression.
-func Parse(input string) (CronExpression, error) {
-	normalized := strings.ToLower(strings.TrimSpace(input))
+	var expr string
+	var desc string
 
 	switch {
-	case normalized == "every minute":
-		return CronExpression{"*", "*", "*", "*", "*"}, nil
-	case normalized == "every hour":
-		return CronExpression{"0", "*", "*", "*", "*"}, nil
-	case normalized == "every day" || normalized == "daily":
-		return CronExpression{"0", "0", "*", "*", "*"}, nil
-	case normalized == "every week" || normalized == "weekly":
-		return CronExpression{"0", "0", "*", "*", "0"}, nil
-	case normalized == "every month" || normalized == "monthly":
-		return CronExpression{"0", "0", "1", "*", "*"}, nil
-	case normalized == "every year" || normalized == "yearly" || normalized == "annually":
-		return CronExpression{"0", "0", "1", "1", "*"}, nil
+	case input == "every minute":
+		expr = "* * * * *"
+		desc = "Every minute"
+
+	case input == "every hour":
+		expr = "0 * * * *"
+		desc = "At the start of every hour"
+
+	case input == "every day" || input == "daily":
+		expr = "0 0 * * *"
+		desc = "Every day at midnight"
+
+	case input == "every week" || input == "weekly":
+		expr = "0 0 * * 0"
+		desc = "Every Sunday at midnight"
+
+	case input == "every month" || input == "monthly":
+		expr = "0 0 1 * *"
+		desc = "On the 1st of every month at midnight"
+
+	case strings.HasPrefix(input, "every ") && strings.Contains(input, " minutes"):
+		step, err := parseEveryNMinutes(input)
+		if err != nil {
+			return nil, err
+		}
+		expr = fmt.Sprintf("*/%d * * * *", step)
+		desc = fmt.Sprintf("Every %d minutes", step)
+
+	case strings.HasPrefix(input, "at ") && strings.Contains(input, "on "):
+		hour, minute, day, err := parseAtTimeOnDay(input)
+		if err != nil {
+			return nil, err
+		}
+		expr = fmt.Sprintf("%d %d * * %d", minute, hour, day)
+		desc = fmt.Sprintf("At %02d:%02d on %s", hour, minute, dayName(day))
+
+	case strings.HasPrefix(input, "at "):
+		hour, minute, err := parseAtTime(input)
+		if err != nil {
+			return nil, err
+		}
+		expr = fmt.Sprintf("%d %d * * *", minute, hour)
+		desc = fmt.Sprintf("Every day at %02d:%02d", hour, minute)
+
+	default:
+		return nil, fmt.Errorf("unrecognized schedule: %q", input)
 	}
 
-	if expr, ok := parseDayOfWeek(normalized); ok {
-		return expr, nil
+	if err := validator.Validate(expr); err != nil {
+		return nil, fmt.Errorf("generated invalid expression: %w", err)
 	}
 
-	if expr, ok := parseEveryNMinutes(normalized); ok {
-		return expr, nil
-	}
+	return &Result{Expression: expr, Description: desc}, nil
+}
 
-	if expr, ok := parseAtTime(normalized); ok {
-		return expr, nil
+func dayName(dow int) string {
+	names := []string{"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"}
+	if dow >= 0 && dow < len(names) {
+		return names[dow]
 	}
-
-	return CronExpression{}, fmt.Errorf("unrecognized schedule: %q", input)
+	return "Unknown"
 }
